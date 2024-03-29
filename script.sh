@@ -25,6 +25,7 @@ wget "https://www.futurelearn.com/links/f/no858mqqw7cxpdgv3ko0eqohoo2p7qc"
 
 # Rename the file
 mv MN908947.fasta.sa MN908947.fasta
+
 # Index the reference genome
 bwa index MN908947.fasta 
 
@@ -33,6 +34,9 @@ bwa mem MN908947.fasta ERR5743893_1.fastq ERR5743893_2.fastq > Mapping/ERR574389
 
 # Convert the SAM file to a BAM file to save space
 samtools view -@ 20 -S -b Mapping/ERR5743893.sam > Mapping/ERR5743893.bam
+
+# Sort the BAM file based on the order the reads were mapped
+samtools sort -@ 32 -o Mapping/ERR5743893.sorted.bam Mapping/ERR5743893.bam
 
 # Index the BAM file
 samtools index Mapping/ERR5743893.sorted.bam
