@@ -20,7 +20,12 @@ multiqc .
 # Make a new directory "Mapping"
 mkdir Mapping
 
-# Index the reference genom
+# Download the reference genome
+wget "https://www.futurelearn.com/links/f/no858mqqw7cxpdgv3ko0eqohoo2p7qc"
+
+# Rename the file
+mv MN908947.fasta.sa MN908947.fasta
+# Index the reference genome
 bwa index MN908947.fasta 
 
 # Mapping
