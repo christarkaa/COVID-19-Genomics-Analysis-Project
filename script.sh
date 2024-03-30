@@ -3,10 +3,6 @@
 # Error handling: Exit script if any command fails
 set -e
 
-# Create a directory for the project
-mkdir -p covid && cd covid || exit 1
-echo "Created project directory."
-
 # Download the dataset (assuming ERR5743893 is a valid accession)
 fastq-dump --split-files ERR5743893
 echo "Downloaded dataset."
