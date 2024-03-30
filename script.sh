@@ -1,51 +1,58 @@
 #!/usr/bin/env bash
 
-# Make a new directory for the project and change to the covid directory
-mkdir covid && cd "$_"
+# Error handling: Exit script if any command fails
+set -e
 
-# Download the dataset 
+# Create a directory for the project
+mkdir -p covid && cd covid || exit 1
+echo "Created project directory."
+
+# Download the dataset (assuming ERR5743893 is a valid accession)
 fastq-dump --split-files ERR5743893
+echo "Downloaded dataset."
 
-# Make a new directory for quality control reports
-mkdir -p QC_Reports 
+# Create directories for quality control and mapping
+mkdir -p QC_Reports
+mkdir -p Mapping
+echo "Created directories for quality control and mapping."
 
 # Quality control
 fastqc ERR5743893_1.fastq ERR5743893_2.fastq -o QC_Reports
+echo "Performed quality control."
 
-# Use MultiQC to summarise the QC results
-multiqc . 
+# Summarize QC results
+multiqc QC_Reports
+echo "Summarized QC results."
 
-# The reads are good so there is no need for trimming
-
-# Make a new directory "Mapping"
-mkdir Mapping
-
-# Index the reference genome
-bwa index MN908947.fasta 
+# Index the reference genome for mapping (if not already indexed)
+if [ ! -f MN908947.fasta.bwt ]; then
+    bwa index MN908947.fasta
+    echo "Indexed reference genome for mapping."
+fi
 
 # Mapping
 bwa mem MN908947.fasta ERR5743893_1.fastq ERR5743893_2.fastq > Mapping/ERR5743893.sam
-
-# Convert the SAM file to a BAM file to save space
 samtools view -@ 20 -S -b Mapping/ERR5743893.sam > Mapping/ERR5743893.bam
-
-# Sort the BAM file based on the order the reads were mapped
 samtools sort -@ 32 -o Mapping/ERR5743893.sorted.bam Mapping/ERR5743893.bam
-
-# Index the BAM file
 samtools index Mapping/ERR5743893.sorted.bam
+echo "Performed mapping."
 
-# Index the reference genome using samtools
-samtools faidx MN908947.fasta
+# Index the reference genome for variant calling (if not already indexed)
+if [ ! -f MN908947.fasta.fai ]; then
+    samtools faidx MN908947.fasta
+    echo "Indexed reference genome for variant calling."
+fi
 
 # Variant calling using freebayes
-freebayes -f MN908947.fasta Mapping/ERR5743893.sorted.bam  > ERR5743893.vcf
+freebayes -f MN908947.fasta Mapping/ERR5743893.sorted.bam > ERR5743893.vcf
+echo "Performed variant calling."
 
-# Compres the VCF file
+# Compress and index the VCF file
 bgzip ERR5743893.vcf
-
-# Index the VCF file
 tabix ERR5743893.vcf.gz
+echo "Compressed and indexed VCF file."
+
+echo "Analysis completed successfully!"
 
 
 
