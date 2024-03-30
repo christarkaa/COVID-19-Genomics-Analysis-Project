@@ -9,66 +9,59 @@ accessions=(
   "ERR5405022"
 )
 
-# Loop through each accession number
+# Error handling: Exit script if any command fails
+set -e
+
+# Define a function to process each sample
+process_sample() {
+    local accession="$1"
+
+    # Create a directory for the sample
+    mkdir -p "$accession"
+    cd "$accession" || exit 1
+
+    # Download the dataset 
+    fastq-dump --split-files "$accession"
+
+    # Create a directory for quality control reports
+    mkdir -p QC_Reports 
+
+    # Perform quality control
+    fastqc "${accession}_1.fastq" "${accession}_2.fastq" -o QC_Reports
+
+    # Use MultiQC to summarize the QC results
+    multiqc . 
+
+    # Create a directory for mapping
+    mkdir -p Mapping
+
+    # Download the reference genome if not already downloaded
+    if [ ! -f MN908947.fasta ]; then
+        wget "https://www.futurelearn.com/links/f/no858mqqw7cxpdgv3ko0eqohoo2p7qc"
+        mv MN908947.fasta.sa MN908947.fasta
+        bwa index MN908947.fasta 
+        samtools faidx MN908947.fasta
+    fi
+
+    # Map the reads
+    bwa mem MN908947.fasta "${accession}_1.fastq" "${accession}_2.fastq" > "Mapping/${accession}.sam"
+    samtools view -@ 20 -S -b "Mapping/${accession}.sam" > "Mapping/${accession}.bam"
+    samtools sort -@ 32 -o "Mapping/${accession}.sorted.bam" "Mapping/${accession}.bam"
+    samtools index "Mapping/${accession}.sorted.bam"
+
+    # Variant calling
+    freebayes -f MN908947.fasta "Mapping/${accession}.sorted.bam" > "${accession}.vcf"
+    bgzip "${accession}.vcf"
+    tabix "${accession}.vcf.gz"
+
+    # Convert VCF to CSV
+    bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER\n' "${accession}.vcf.gz" > "${accession}.csv"
+
+    # Move back to the parent directory
+    cd ..
+}
+
+# Process each sample
 for accession in "${accessions[@]}"; do
-  # Make a new directory for the project and change to the directory
-  mkdir -p "$accession" && cd "$accession"
-
-  # Download the dataset 
-  fastq-dump --split-files "$accession"
-
-  # Make a new directory for quality control reports
-  mkdir -p QC_Reports 
-
-  # Quality control
-  fastqc "${accession}_1.fastq" "${accession}_2.fastq" -o QC_Reports
-
-  # Use MultiQC to summarise the QC results
-  multiqc . 
-
-  # The reads are good so there is no need for trimming
-
-  # Make a new directory "Mapping"
-  mkdir Mapping
-
-  # Download the reference genome
-  wget "https://www.futurelearn.com/links/f/no858mqqw7cxpdgv3ko0eqohoo2p7qc"
-
-  # Rename the file
-  mv MN908947.fasta.sa MN908947.fasta
-
-  # Index the reference genome
-  bwa index MN908947.fasta 
-
-  # Mapping
-  bwa mem MN908947.fasta "${accession}_1.fastq" "${accession}_2.fastq" > "Mapping/${accession}.sam"
-
-  # Convert the SAM file to a BAM file to save space
-  samtools view -@ 20 -S -b "Mapping/${accession}.sam" > "Mapping/${accession}.bam"
-
-  # Sort the BAM file based on the order the reads were mapped
-  samtools sort -@ 32 -o "Mapping/${accession}.sorted.bam" "Mapping/${accession}.bam"
-
-  # Index the BAM file
-  samtools index "Mapping/${accession}.sorted.bam"
-
-  # Index the reference genome using samtools
-  samtools faidx MN908947.fasta
-
-  # Variant calling using freebayes
-  freebayes -f MN908947.fasta "Mapping/${accession}.sorted.bam"  > "${accession}.vcf"
-
-  # Compress the VCF file
-  bgzip "${accession}.vcf"
-
-  # Index the VCF file
-  tabix "${accession}.vcf.gz"
-
-  # Convert the VCF file to a .csv file for further analysis and visualization
-  echo -e "CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER" > "${accession}.csv"
-  bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER\n' "${accession}.vcf.gz" >> "${accession}.csv"
-
-  # Move back to the parent directory
-  cd ..
+    process_sample "$accession"
 done
-
