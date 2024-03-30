@@ -12,7 +12,6 @@ accessions=(
 
 # Create samples.txt and copy accessions into it
 echo "${accessions[@]}" > samples.txt
-
 echo "File samples.txt created with the ENA accessions."
 
 
