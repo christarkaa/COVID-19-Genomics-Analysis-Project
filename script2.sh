@@ -10,7 +10,7 @@ accessions=(
 )
 
 # Error handling: Exit script if any command fails
-set -e
+set -eux
 
 # Define a function to process each sample
 process_sample() {
