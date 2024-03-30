@@ -1,5 +1,5 @@
 # COVID-19-Genomics-Analysis-Project
-The project is created based on the lessons from the Wellcome Connecting Science course on Bioinformatics.
+The project is created based on the lessons from the Wellcome Connecting Science Bioinformatics course on FutureLearn.
 
 ## Scripts
 1. The first script outlines a pipeline designed for processing a single sample.
