@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 
+# Error handling: Exit script if any command fails
+set -e
+
 # Define an array of sample accession numbers
-accessions=(
+samples=(
   "ERR5743893"
   "ERR5556343"
   "SRR13500958"
@@ -9,59 +12,69 @@ accessions=(
   "ERR5405022"
 )
 
-# Error handling: Exit script if any command fails
-set -eux
+# Index the reference genome for mapping (if not already indexed)
+if [ ! -f MN908947.fasta.bwt ]; then
+    bwa index MN908947.fasta
+    echo "Indexed reference genome for mapping."
+fi
 
-# Define a function to process each sample
-process_sample() {
-    local accession="$1"
+# Loop through each sample
+for sample in "${samples[@]}"; do
+  echo "Processing sample: $sample"
 
-    # Create a directory for the sample
-    mkdir -p "$accession"
-    cd "$accession" || exit 1
+  # Download the dataset (assuming ERR5743893 is a valid accession)
+  fastq-dump --split-files "$sample"
+  echo "Downloaded dataset for $sample."
 
-    # Download the dataset 
-    fastq-dump --split-files "$accession"
+  # Create directories for quality control and mapping
+  mkdir -p "$sample"/QC_Reports
+  mkdir -p "$sample"/Mapping
+  echo "Created directories for quality control and mapping for $sample."
 
-    # Create a directory for quality control reports
-    mkdir -p QC_Reports 
+  # Quality control
+  fastqc "${sample}"_1.fastq "${sample}"_2.fastq -o "$sample"/QC_Reports
+  echo "Performed quality control for $sample."
 
-    # Perform quality control
-    fastqc "${accession}_1.fastq" "${accession}_2.fastq" -o QC_Reports
+  # Summarize QC results
+  multiqc "$sample"/QC_Reports
+  echo "Summarized QC results for $sample."
 
-    # Use MultiQC to summarize the QC results
-    multiqc . 
+  # Mapping
+  bwa mem MN908947.fasta "${sample}"_1.fastq "${sample}"_2.fastq > "$sample"/Mapping/"$sample".sam
+  samtools view -@ 20 -S -b "$sample"/Mapping/"$sample".sam > "$sample"/Mapping/"$sample".bam
+  samtools sort -@ 32 -o "$sample"/Mapping/"$sample".sorted.bam "$sample"/Mapping/"$sample".bam
+  samtools index "$sample"/Mapping/"$sample".sorted.bam
+  echo "Performed mapping for $sample."
 
-    # Create a directory for mapping
-    mkdir -p Mapping
+  # Index the reference genome for variant calling (if not already indexed)
+  if [ ! -f MN908947.fasta.fai ]; then
+      samtools faidx MN908947.fasta
+      echo "Indexed reference genome for variant calling."
+  fi
 
-    # Download the reference genome if not already downloaded
-    if [ ! -f MN908947.fasta ]; then
-        wget "https://www.futurelearn.com/links/f/no858mqqw7cxpdgv3ko0eqohoo2p7qc"
-        mv MN908947.fasta.sa MN908947.fasta
-        bwa index MN908947.fasta 
-        samtools faidx MN908947.fasta
-    fi
+  # Variant calling using freebayes
+  freebayes -f MN908947.fasta "$sample"/Mapping/"$sample".sorted.bam > "$sample"/"$sample".vcf
+  echo "Performed variant calling for $sample."
 
-    # Map the reads
-    bwa mem MN908947.fasta "${accession}_1.fastq" "${accession}_2.fastq" > "Mapping/${accession}.sam"
-    samtools view -@ 20 -S -b "Mapping/${accession}.sam" > "Mapping/${accession}.bam"
-    samtools sort -@ 32 -o "Mapping/${accession}.sorted.bam" "Mapping/${accession}.bam"
-    samtools index "Mapping/${accession}.sorted.bam"
+  # Compress and index the VCF file
+  bgzip "$sample"/"$sample".vcf
+  tabix "$sample"/"$sample".vcf.gz
+  echo "Compressed and indexed VCF file for $sample."
 
-    # Variant calling
-    freebayes -f MN908947.fasta "Mapping/${accession}.sorted.bam" > "${accession}.vcf"
-    bgzip "${accession}.vcf"
-    tabix "${accession}.vcf.gz"
+  # Convert VCF to CSV
+  echo -e "Sample\tCHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER" > "$sample"/"$sample".csv
+  bcftools query -l "$sample"/"$sample".vcf.gz | sed 's/$/'$'\t''/' > "$sample"/sample_column.txt
+  paste "$sample"/sample_column.txt <(bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER\n' "$sample"/"$sample".vcf.gz) >> "$sample"/"$sample".csv
+  echo "Converted VCF to CSV for $sample."
 
-    # Convert VCF to CSV
-    bcftools query -f '%CHROM\t%POS\t%ID\t%REF\t%ALT\t%QUAL\t%FILTER\n' "${accession}.vcf.gz" > "${accession}.csv"
+  # Move the CSV file to the main directory
+  mv "$sample"/"$sample".csv .
 
-    # Move back to the parent directory
-    cd ..
-}
-
-# Process each sample
-for accession in "${accessions[@]}"; do
-    process_sample "$accession"
 done
+
+# Merge CSV files for all samples
+echo "Merging CSV files..."
+cat *.csv > merged.csv
+echo "Merged CSV files for all samples."
+
+echo "Analysis completed successfully!"
