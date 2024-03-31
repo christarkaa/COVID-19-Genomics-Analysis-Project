@@ -51,4 +51,4 @@ nextflow run nf-core/viralrecon -profile docker \
 --skip_nextclade \
 --platform illumina
 
-# 
+
