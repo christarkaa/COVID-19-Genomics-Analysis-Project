@@ -9,7 +9,6 @@ library("RColorBrewer")
 var_tb <- as_tibble(var)
 var_tb
 
-
 # Progressing in variants exploration
 
 # We are going to plot:
